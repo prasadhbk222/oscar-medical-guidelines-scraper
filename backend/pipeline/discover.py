@@ -157,7 +157,42 @@ async def discover() -> list[Discovered]:
         return await asyncio.gather(*(resolve(it) for it in items))
 
 
-async def _main() -> None:
+async def persist(items: list[Discovered]) -> int:
+    """Idempotent upsert on pdf_url. Returns total policy rows after the write."""
+    from sqlalchemy import func, select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from backend.app.db import async_session
+    from backend.app.models import Policy
+
+    rows = [
+        {
+            "title": i.title,
+            "pdf_url": i.pdf_url,
+            "source_page_url": i.source_page_url,
+        }
+        for i in items
+        if i.pdf_url
+    ]
+    if not rows:
+        return 0
+
+    async with async_session() as session:
+        stmt = pg_insert(Policy).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["pdf_url"],
+            set_={
+                "title": stmt.excluded.title,
+                "source_page_url": stmt.excluded.source_page_url,
+            },
+        )
+        await session.execute(stmt)
+        await session.commit()
+        total = await session.scalar(select(func.count()).select_from(Policy))
+    return total or 0
+
+
+async def _main(do_persist: bool = True) -> None:
     items = await discover()
     ok = [i for i in items if i.pdf_url]
     fail = [i for i in items if not i.pdf_url]
@@ -170,6 +205,19 @@ async def _main() -> None:
         for i in fail:
             print(f"  {i.source_page_url}  ({i.error})")
 
+    if do_persist:
+        total = await persist(items)
+        print(f"\nPersisted (upsert on pdf_url). policies table now has {total} rows.")
+
 
 if __name__ == "__main__":
-    asyncio.run(_main())
+    import argparse
+
+    p = argparse.ArgumentParser(description="Discover Oscar guideline PDFs.")
+    p.add_argument(
+        "--no-persist",
+        action="store_true",
+        help="console only; do not write to the DB",
+    )
+    args = p.parse_args()
+    asyncio.run(_main(do_persist=not args.no_persist))

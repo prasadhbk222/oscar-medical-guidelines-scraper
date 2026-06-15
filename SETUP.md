@@ -29,7 +29,7 @@ uv run python -m backend.app.init_db
 ```
 
 ## Pipeline (added per phase)
-- Discovery: `uv run python -m backend.pipeline.discover`   _(Phase 1/2)_
+- Discovery: `uv run python -m backend.pipeline.discover`   _(persists to `policies`; add `--no-persist` for console only)_
 - Download:  `uv run python -m backend.pipeline.download`   _(Phase 3)_
 - Structure: `uv run python -m backend.pipeline.structure`  _(Phase 4)_
 
