@@ -11,18 +11,27 @@ navigate the trees.
 ## Quick start
 ```bash
 cp .env.example .env        # set OPENAI_API_KEY
-docker compose up -d        # Postgres :5435 + pgweb :8081
-uv sync
-uv run python -m backend.app.init_db
-
-uv run python -m backend.pipeline.discover     # discover + persist all PDF links
-uv run python -m backend.pipeline.download     # download all PDFs
-uv run python -m backend.pipeline.structure    # structure 12 policies (LLM)
-
-uv run uvicorn backend.app.main:app --port 8008 --reload          # API
-cd frontend && npm install && npm run dev                          # UI :5173 (Node 18+)
+make up                     # Postgres :5435 + pgweb :8081 (docker)
+make setup                  # uv sync + create tables
+make seed                   # discover -> download -> structure (full pipeline)
+make api                    # backend :8008          (separate terminal)
+make web-install && make web  # UI :5173 (Node 18+)  (separate terminal)
 ```
-Inspect tables visually in **pgweb** at http://localhost:8081. Run tests: `uv run pytest -q`.
+`make help` lists all targets; `make test` runs the suite. Inspect tables visually in
+**pgweb** at http://localhost:8081. Raw (non-make) commands are in [SETUP.md](SETUP.md).
+
+<details><summary>Equivalent without make</summary>
+
+```bash
+docker compose up -d
+uv sync && uv run python -m backend.app.init_db
+uv run python -m backend.pipeline.discover
+uv run python -m backend.pipeline.download
+uv run python -m backend.pipeline.structure
+uv run uvicorn backend.app.main:app --port 8008 --reload
+cd frontend && npm install && npm run dev
+```
+</details>
 
 ## Results
 - **159** PDF links discovered (Medical Guidelines section; `/medical` CG + `/pharmacy` PG), all downloaded.
