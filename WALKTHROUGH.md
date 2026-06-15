@@ -58,4 +58,16 @@ flowchart LR
 
 **Idempotency (Q/A):** the upsert is keyed on `pdf_url`, so reruns update-in-place rather than insert. Verified: two consecutive runs both leave the table at 159 rows; `count(*) == count(DISTINCT pdf_url)`.
 
+## Phase 3 — PDF download
+
+**Built:** `backend/pipeline/download.py`
+- `_download_one()` — fetches a policy's `pdf_url` via `PoliteClient` (throttle + retry+backoff). Validates `content-type` contains `pdf`. Saves to `data/pdfs/{id}_{slug}.pdf`. Returns an `Outcome` (stored_location / http_status / error).
+- Resume-safe: existing non-empty files are skipped (recorded as cached, status 200).
+- `_persist()` — upserts **one `downloads` row per `policy_id`** (done in Python since there's no DB unique on policy_id), so reruns don't accumulate duplicate attempt rows.
+- Failures are both logged and persisted: transport errors, non-200 status, or non-PDF content-type all land in `downloads.error` / `http_status` with `stored_location = NULL`.
+
+**Result:** 159/159 downloaded (≈55 MB), 0 failures. `downloads`: 159 rows, 159 distinct policy_id. Rerun is a no-op (cached) and keeps row count at 159.
+
+**Retry/throttle/idempotency (Q/A):** retry+backoff and a min-interval throttle live in `PoliteClient` (shared with discovery). Idempotency is two-layered: disk-level (skip existing files) and DB-level (upsert by policy_id).
+
 _(Later phases appended below as we build.)_
