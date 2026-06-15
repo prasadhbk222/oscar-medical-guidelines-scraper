@@ -115,4 +115,65 @@ Approach (LLM-driven, with a deterministic assist):
 
 **Verified:** `vite build` compiles; end-to-end the dev server serves the app and proxies the API (159 policies, 12 with trees).
 
-_(Architecture + data-flow diagrams consolidated in the Final section.)_
+## Final — Architecture & data flow
+
+### Data model (ER)
+```mermaid
+erDiagram
+    policies ||--o| downloads : "1:1 (per policy)"
+    policies ||--o| structured_policies : "1:1 (per policy)"
+    policies {
+        int id PK
+        string title
+        string pdf_url UK
+        string source_page_url
+        datetime discovered_at
+    }
+    downloads {
+        int id PK
+        int policy_id FK
+        string stored_location
+        int http_status
+        text error
+        datetime downloaded_at
+    }
+    structured_policies {
+        int id PK
+        int policy_id FK_UK
+        text extracted_text
+        jsonb structured_json
+        jsonb llm_metadata
+        text validation_error
+        datetime structured_at
+    }
+```
+
+### Pipeline data flow
+```mermaid
+sequenceDiagram
+    participant S as hioscar.com
+    participant D as discover.py
+    participant DB as Postgres
+    participant DL as download.py
+    participant ST as structure.py
+    participant AI as OpenAI
+    D->>S: GET listing (__NEXT_DATA__)
+    D->>S: GET each policy page -> resolve PDF asset URL
+    D->>DB: upsert policies (ON CONFLICT pdf_url)
+    DL->>DB: read policies
+    DL->>S: GET each PDF (throttle + retry)
+    DL->>DB: upsert downloads (per policy_id)
+    ST->>DB: read policies + downloads
+    ST->>ST: pypdf extract + locate_initial() hint
+    ST->>AI: chat (JSON mode) -> criteria tree
+    ST->>ST: validate RuleNode (+1 repair retry)
+    ST->>DB: upsert structured_policies (per policy_id)
+```
+
+### Serving
+`FastAPI (:8008)` reads the three tables → `GET /api/policies`, `/api/policies/{id}`.
+`React + Vite (:5173)` proxies `/api`, renders the policy list and the recursive criteria tree.
+
+### Run order
+`docker compose up` → `init_db` → `discover` → `download` → `structure` → `uvicorn` + `vite`.
+Each pipeline step is idempotent (upsert keys: `pdf_url`, then `policy_id`).

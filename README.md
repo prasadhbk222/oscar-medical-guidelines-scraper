@@ -1,3 +1,64 @@
+# Oscar Medical Guidelines — Scraper + Initial-Criteria Tree Explorer
+
+End-to-end system that discovers every Medical-Guidelines PDF on Oscar's clinical-guidelines
+page, downloads them, structures ≥10 policies' **initial** medical-necessity criteria into
+recursive JSON trees (shape of `oscar.json`) with an LLM, and serves a UI to browse and
+navigate the trees.
+
+- **Docs:** [SETUP.md](SETUP.md) (run it) · [WALKTHROUGH.md](WALKTHROUGH.md) (how it works + diagrams) · [PLAN.md](PLAN.md) (phases)
+- **Stack:** FastAPI · SQLAlchemy 2 async · Postgres + pgweb (Docker) · httpx + BeautifulSoup · pypdf · OpenAI · React + Vite. Managed with `uv`.
+
+## Quick start
+```bash
+cp .env.example .env        # set OPENAI_API_KEY
+docker compose up -d        # Postgres :5435 + pgweb :8081
+uv sync
+uv run python -m backend.app.init_db
+
+uv run python -m backend.pipeline.discover     # discover + persist all PDF links
+uv run python -m backend.pipeline.download     # download all PDFs
+uv run python -m backend.pipeline.structure    # structure 12 policies (LLM)
+
+uv run uvicorn backend.app.main:app --port 8008 --reload          # API
+cd frontend && npm install && npm run dev                          # UI :5173 (Node 18+)
+```
+Inspect tables visually in **pgweb** at http://localhost:8081. Run tests: `uv run pytest -q`.
+
+## Results
+- **159** PDF links discovered (Medical Guidelines section; `/medical` CG + `/pharmacy` PG), all downloaded.
+- **12** policies structured into validated initial-criteria trees.
+
+### Policies structured
+`cg013v11` Acupuncture · `pg193v2` Adakveo · `cg059v7` Allergy Immunotherapy ·
+`cg032v11` Ambulatory Cardiac Event Monitoring · `cg057v8` Ambulance Services ·
+`pg264v2` Amvuttra · `cg041v11` Anesthesia in Endoscopic Procedures ·
+`pg008v10` Anti-migraine CGRP Agents · `pg136v3` Off-label Medical Necessity ·
+`pg269v2` Authorization Duration Exception · `cg026v11` Autonomic Testing ·
+`cg018v11` Balloon Ostial Dilation
+(the default first-12-by-id set; includes the README's `cg013v11` initial/continuation example).
+
+## Initial-only selection logic
+Guidelines often have an **Initial** criteria tree followed by **Continuation** criteria
+(*subsequent / reauthorization / renewal / maintenance / continued care*) and sometimes
+multiple indication pathways. We structure only the **initial** tree.
+
+1. `backend/pipeline/select_initial.py::locate_initial()` deterministically finds the first
+   *initial* marker and the next *continuation* marker; the span between is the initial region.
+2. That region's heading is passed to the LLM as a **hint**; the model extracts the initial
+   tree from the full document text (chosen over a brittle hard slice).
+3. **Multiple pathways** → nested under a single root `operator: "OR"` (the schema requires one root).
+4. **Fallback** (~11% of docs with no "initial" label): use the *first complete criteria tree*.
+
+Every LLM output is validated against the recursive Pydantic `RuleNode` (leaf ⇔ no operator;
+branch ⇔ operator + children). Invalid output gets one repair retry; persistent failures are
+stored with `validation_error` and never crash the pipeline.
+
+**Failure modes:** a doc that leads with continuation criteria or uses unusual headings can
+mis-hint; marker words appearing in prose can mis-locate the boundary. Mitigated by the
+"first initial → next continuation" rule and schema validation.
+
+---
+
 ## Oscar Medical Guidelines → PDF Scraper + “Initial Criteria” Tree Explorer (1 hour + 30 min Q/A)
 
 ### Goal
