@@ -1,5 +1,16 @@
 # SETUP
 
+## TL;DR (Makefile)
+```bash
+cp .env.example .env        # set OPENAI_API_KEY
+make up                     # Postgres + pgweb (docker)
+make setup                  # uv sync + create tables
+make seed                   # discover -> download -> structure
+make api                    # backend on :8008   (separate terminal)
+make web-install && make web  # UI on :5173       (separate terminal, Node 18+)
+```
+`make help` lists all targets. The rest of this file is the manual equivalent.
+
 ## Prerequisites
 - Docker + Docker Compose
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
