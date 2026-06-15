@@ -70,4 +70,32 @@ flowchart LR
 
 **Retry/throttle/idempotency (Q/A):** retry+backoff and a min-interval throttle live in `PoliteClient` (shared with discovery). Idempotency is two-layered: disk-level (skip existing files) and DB-level (upsert by policy_id).
 
+## Phase 4 — Structuring pipeline (≥10)
+
+**Built:**
+- `backend/pipeline/extract.py` — `extract_text()`: pypdf text + light whitespace normalization (no aggressive de-spacing; the LLM tolerates noise).
+- `backend/pipeline/select_initial.py` — `locate_initial()`: the documented **initial-only** heuristic (below).
+- `backend/pipeline/structure.py`:
+  - `SYSTEM_PROMPT` — instructs the model to emit the exact recursive schema, extract **only** initial criteria, OR-root multiple pathways, and fall back to the first complete tree.
+  - `structure_one()` — extract → build prompt (with the initial hint) → OpenAI JSON mode → `StructuredPolicySchema.model_validate` → **one repair retry** on `JSONDecodeError`/`ValidationError` (error fed back) → else store raw + `validation_error`. API/transport errors are caught and recorded, never crash.
+  - `_upsert()` — `ON CONFLICT (policy_id) DO UPDATE`; idempotent reruns.
+  - `select_policies()` — joins `downloads`, takes successfully-downloaded policies ordered by id (`--limit`, default 12), or an explicit `--slugs` set.
+
+### Initial-only selection logic
+The guidelines commonly contain an **Initial** criteria tree followed by **Continuation** criteria (labeled *subsequent / reauthorization / renewal / maintenance / continued care*), and sometimes multiple indication pathways. We must structure only the *initial* tree.
+
+Approach (LLM-driven, with a deterministic assist):
+1. `locate_initial(text)` scans for the first **initial** marker (`medical necessity criteria for initial`, `initial clinical review`, `initial authorization/approval/...`, then bare `initial`) and the next **continuation** marker after it. The span between is the initial region.
+2. That region's heading is passed to the LLM as a **hint**; the model still extracts from the full document (so it isn't hostage to a brittle slice).
+3. **Multiple pathways** → the model nests them under one root `operator: "OR"` node (the schema requires a single root).
+4. **Fallback**: if no initial marker exists (~11% of docs), `locate_initial` reports `found=False` and the prompt instructs the model to use the *first complete criteria tree*.
+
+**Failure modes:** a doc that leads with continuation criteria, or uses unusual headings, can mis-hint; marker words in prose (not headings) can mis-locate the boundary. We mitigate with the "first initial → next continuation" rule and by validating output against the schema.
+
+**Validation & malformed handling (Q/A):** every output is parsed and validated against `RuleNode`; the leaf/branch invariant (children ⇔ operator) is enforced. Invalid output triggers one repair round-trip; persistent failures are stored with `validation_error` and `structured_json={"raw": ...}` so the pipeline never crashes and failures are inspectable.
+
+**Result:** 12/12 valid trees (node counts 5–51, depth 2–6). Verified that `cg013v11` (Acupuncture, which has Initial + Subsequent + Maintenance sections) contains **zero** continuation/subsequent/maintenance leakage.
+
+**Tests** (`backend/tests/`): `test_schema.py` (schema invariants + canonical `oscar.json`), `test_select_initial.py` (selector locates/excludes correctly + fallback), `test_idempotent_structure.py` (DB upsert is one-row-per-policy; auto-skips without Postgres). 12 passing.
+
 _(Later phases appended below as we build.)_
