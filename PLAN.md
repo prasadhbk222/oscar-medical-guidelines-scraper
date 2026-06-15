@@ -16,7 +16,7 @@ Phased build. Each phase ends at a **verification gate**: I print what to check,
 - [x] **Phase 1 — PDF discovery (console only).** Scrape source page, list every guideline PDF (title + pdf_url + source_page_url). _Gate: eyeball console list for completeness._
 - [x] **Phase 2 — Persist discovery.** Idempotent upsert on `pdf_url`. _Gate: rows in pgweb match console; rerun adds nothing._
 - [x] **Phase 3 — PDF download.** Retry + throttle; persist outcome to `downloads`. _Gate: download dir + table, failures recorded._
-- [ ] **Phase 4 — Structuring pipeline (≥10).** Extract text → OpenAI → criteria tree → validate → store. Initial-only selection. Tests. _Gate: ≥10 structured_json rows match oscar.json shape._
+- [x] **Phase 4 — Structuring pipeline (≥10).** Extract text → OpenAI → criteria tree → validate → store. Initial-only selection. Tests. _Gate: ≥10 structured_json rows match oscar.json shape._
 - [ ] **Phase 5 — Frontend.** Policy list + structured-tree detail view (expand/collapse, AND/OR vs leaf). _Gate: browse UI._
 - [ ] **Final.** README update, fresh-clone/unzip end-to-end check, WALKTHROUGH architecture + data-flow diagrams.
 

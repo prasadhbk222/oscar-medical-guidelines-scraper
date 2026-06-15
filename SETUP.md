@@ -33,12 +33,18 @@ uv run python -m backend.app.init_db
 - Download:  `uv run python -m backend.pipeline.download`   _(Phase 3)_
 - Structure: `uv run python -m backend.pipeline.structure`  _(Phase 4)_
 
-## Backend API (Phase 5)
+## Backend API
 ```bash
-uv run uvicorn backend.app.main:app --reload
+uv run uvicorn backend.app.main:app --port 8008 --reload
 ```
+Endpoints: `GET /api/policies`, `GET /api/policies/{id}`. (Port 8008 — the Vite dev proxy targets it.)
 
-## Frontend (Phase 5)
+## Frontend
+Requires **Node 18+** (Vite 6). On this machine Node 20 is available via Homebrew:
 ```bash
-cd frontend && npm install && npm run dev
+export PATH="/opt/homebrew/opt/node@20/bin:$PATH"   # if `node -v` < 18
+cd frontend
+npm install
+npm run dev          # http://localhost:5173 (proxies /api -> :8008)
 ```
+Run the backend (above) in another terminal first.

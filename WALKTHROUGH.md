@@ -98,4 +98,21 @@ Approach (LLM-driven, with a deterministic assist):
 
 **Tests** (`backend/tests/`): `test_schema.py` (schema invariants + canonical `oscar.json`), `test_select_initial.py` (selector locates/excludes correctly + fallback), `test_idempotent_structure.py` (DB upsert is one-row-per-policy; auto-skips without Postgres). 12 passing.
 
-_(Later phases appended below as we build.)_
+## Phase 5 — Frontend (React + Vite)
+
+**Backend API** (`backend/app/main.py`):
+- `GET /api/policies` — all policies with `downloaded`, `http_status`, `has_structured` flags (left joins downloads + structured_policies).
+- `GET /api/policies/{id}` — policy + download info + `structured_json`/`validation_error`/`llm_metadata`.
+- CORS allows the Vite dev origin; served on port 8008.
+
+**Frontend** (`frontend/`, Vite 6 + React 18, plain JSX):
+- `App.jsx` — master/detail with a title filter and a "structured only" toggle; shows `N policies · M structured`.
+- `components/PolicyDetail.jsx` — title + source/PDF links, AND/OR legend, **Expand all / Collapse all** (remounts the tree via `key` to re-seed each node's default). Renders a `validation_error` block if structuring failed, or a placeholder if unstructured.
+- `components/RuleTree.jsx` — recursive renderer. Branch nodes are collapsible (`▾/▸`); **deep branches (depth ≥ 2) start collapsed** so large trees (e.g. the 51-node allergy tree) stay readable. Operator nodes show a colored `AND`/`OR` pill; leaves show id + text only.
+- `vite.config.js` — dev proxy `/api -> http://localhost:8008`.
+
+**Large-tree readability (Q/A):** depth-based default collapse + per-node toggles + global expand/collapse, monospace rule ids, dashed indent guides, and visually distinct operator pills vs. plain leaves.
+
+**Verified:** `vite build` compiles; end-to-end the dev server serves the app and proxies the API (159 policies, 12 with trees).
+
+_(Architecture + data-flow diagrams consolidated in the Final section.)_
