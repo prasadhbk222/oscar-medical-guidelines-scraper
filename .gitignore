@@ -11,6 +11,7 @@ __pycache__/
 # Data
 data/pdfs/
 data/text/
+discovery_output.txt
 
 # Node
 node_modules/

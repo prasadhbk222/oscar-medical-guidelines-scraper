@@ -130,3 +130,7 @@ Validate every LLM output against this model before storing. On failure, store t
 Be concise and direct. No buzzwords, no over-explaining. Show me commands and code pointers, not prose. When you hit a real decision, stop and ask.
 
 Start with Phase 0. First, confirm the stack (especially the LLM provider) and show me the proposed repo layout before creating files.
+
+
+PG (pharmacy) docs remain because Oscar lists them under the Medical Guidelines header — let me know if you also want PG dropped (would leave 97 CG-only).
+

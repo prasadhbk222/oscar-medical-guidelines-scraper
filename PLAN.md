@@ -12,7 +12,7 @@ Phased build. Each phase ends at a **verification gate**: I print what to check,
 - Frontend: React + Vite
 
 ## Phases
-- [ ] **Phase 0 — Scaffolding.** uv project, git, .gitignore, .env(.example), docker-compose (Postgres + pgweb), doc skeletons, DB models/schema, init_db. _Gate: `docker compose up` + pgweb reachable + `uv run` works + tables created._
+- [x] **Phase 0 — Scaffolding.** uv project, git, .gitignore, .env(.example), docker-compose (Postgres + pgweb), doc skeletons, DB models/schema, init_db. _Gate: `docker compose up` + pgweb reachable + `uv run` works + tables created._
 - [ ] **Phase 1 — PDF discovery (console only).** Scrape source page, list every guideline PDF (title + pdf_url + source_page_url). _Gate: eyeball console list for completeness._
 - [ ] **Phase 2 — Persist discovery.** Idempotent upsert on `pdf_url`. _Gate: rows in pgweb match console; rerun adds nothing._
 - [ ] **Phase 3 — PDF download.** Retry + throttle; persist outcome to `downloads`. _Gate: download dir + table, failures recorded._
