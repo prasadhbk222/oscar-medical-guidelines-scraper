@@ -1,0 +1,132 @@
+I want to create a plan for:
+We have to create a full stack app based on readme file
+We are going to use Python and things like fastapi, pydantic, sqlalchemy, postgres
+Lets use docker for postgres 
+Lets use uv for package manager
+Use a well known library for scraping the website (eg Beautiful soup)
+Lets use React for frontend
+Lets do everything step by step.
+After every step I want to manually verify the output before commiting
+I also want a GUI for postgres db so I can verify the tables are populated correctly eg pgweb
+I will provide the OPEN API key
+Also add some testing wherever needed
+
+lets commit to github after every step so that we can always go back if needed.
+Always verify the results
+
+First do webscraping tasks
+Check output in console
+Then save in database
+Check if tables in db are populated as expected
+Then go to frontend part
+
+Dont try to one shot it. Ask questions wherever you are in doubt. Confirm your choices with me
+Create the plan file in project root
+Also create a setup file so that the project is easily runnable
+We want project to be easily portable via zip file and github
+Also create a detailed follow along document parallely with project implementation which explains how things work with code pointers, architecture decisions and diagrams and everything else needed to thoroughly understand the codebase
+@README.md  @oscar.json
+
+Give me a updated and improved prompt for claude code in vscode based on above
+
+
+
+CLAUDE OUTPUT:
+# Claude Code Kickoff Prompt — Oscar Medical Guidelines Scraper + Tree Explorer
+
+You are building a full-stack app per the attached `@README.md`. The required structured-output shape is defined by `@oscar.json` — treat it as the canonical schema target. Read both fully before writing any code.
+
+## Operating rules (non-negotiable)
+
+1. **Do not one-shot this.** Work in the phases below, in order. Stop at each gate.
+2. **Hard verification gates.** At the end of every step, print a short "VERIFY THIS" block telling me exactly what to check (console output, a DB query, a URL), then **STOP and wait for my confirmation**. Do not start the next step until I say "verified."
+3. **Commit after every verified step.** Use conventional commits (`feat:`, `chore:`, `test:`, `docs:`). One logical step = one commit. Never commit unverified work. Assume I want to be able to `git revert` cleanly to any gate.
+4. **Ask when in doubt.** If a choice is ambiguous (library, schema detail, heuristic, file layout), ask me before deciding. Surface tradeoffs in 1–2 lines, recommend a default, wait.
+5. **Keep me oriented.** Before each step, state in 2–3 lines what you're about to do and why. No filler.
+
+## Tech stack (confirm in Phase 0)
+
+- **Package manager:** `uv`
+- **Backend:** Python, FastAPI, Pydantic (v2), SQLAlchemy (async), `asyncpg`
+- **DB:** Postgres in Docker (`docker-compose`)
+- **DB GUI:** pgweb (containerized) so I can inspect tables visually
+- **Scraping:** `httpx` + BeautifulSoup
+- **LLM (structuring step):** **CONFIRM WITH ME** — I'll provide the OPEN API key. Reference it only via `.env.example` (no real key committed).
+- **Frontend:** React + Vite
+- **Testing:** pytest where it adds signal (parsers, schema validation, idempotency, "initial-only" selection). Don't test trivially.
+
+## Deliverables to maintain in the repo
+
+- `PLAN.md` (project root) — the phased plan, kept updated as we go (check off completed gates).
+- `SETUP.md` — prereqs + exact run commands for: Docker up, DB migrate, discovery, download, structuring, backend, frontend, pgweb. Must let a fresh clone or unzipped copy run end-to-end.
+- `WALKTHROUGH.md` — a **follow-along doc written in parallel with implementation**, not at the end. After each phase, append: what was built, key code pointers (`file:line` or function names), architecture decisions + rationale, and a diagram (Mermaid) where it clarifies flow or data model. Goal: someone new can understand the whole codebase from this doc.
+- `.env.example` — placeholders for all secrets (LLM key, DB URL).
+- The repo must be **portable via both zip and GitHub** — no absolute paths, no machine-specific config, everything driven by env + compose.
+
+## Data model (minimum — match README)
+
+- **policies**: `title`, `pdf_url` (UNIQUE), `source_page_url`, `discovered_at`. Reruns must be idempotent (upsert on `pdf_url`).
+- **downloads**: `policy_id`, `stored_location`, `downloaded_at`, `http_status`, `error` (nullable).
+- **structured_policies** (≥10): `policy_id`, `extracted_text` (or ref), `structured_json`, `structured_at`, `llm_metadata` (model id, prompt), `validation_error` (nullable).
+
+## Required JSON schema (recursive)
+
+Model `oscar.json` exactly with a recursive Pydantic model:
+
+- Top level: `title` (str), `insurance_name` (str, = `"Oscar Health"`), `rules` (root node).
+- Node: `rule_id` (str), `rule_text` (str), optional `operator` (`"AND"` | `"OR"`), optional `rules` (list of nodes).
+- Leaf = `rule_id` + `rule_text`. Non-leaf = has `operator` + `rules`.
+
+Validate every LLM output against this model before storing. On failure, store the raw output + `validation_error`; do not crash the pipeline.
+
+---
+
+## Phase order (do NOT reorder)
+
+### Phase 0 — Scaffolding (gate)
+- `uv` project init, repo init, `.gitignore`, `.env.example`, `docker-compose` for Postgres + pgweb.
+- Create `PLAN.md`, `SETUP.md`, `WALKTHROUGH.md` skeletons.
+- Confirm stack choices (esp. LLM provider) with me.
+- **VERIFY:** `docker compose up` brings Postgres + pgweb online; I can open pgweb in the browser; `uv run` works. Commit.
+
+### Phase 1 — PDF discovery (console only, gate)
+- Scrape the source page; discover **every** medical guideline PDF link (title + `pdf_url` + `source_page_url`).
+- **Print results to console only — no DB yet.**
+- Note how you guarantee completeness (this is a Q/A topic): what selector/strategy, how you handle pagination/nested links, how you'd detect misses.
+- **VERIFY:** I eyeball the console list for completeness. Commit.
+
+### Phase 2 — Persist discovery (gate)
+- Write discovered policies to the `policies` table. Idempotent upsert on `pdf_url`. Run twice to prove no duplicates.
+- **VERIFY:** I query `policies` in pgweb; row count matches console; rerun adds nothing. Commit.
+
+### Phase 3 — PDF download (gate)
+- Download every discovered PDF. Basic **retry + rate limiting / throttling** (polite scraping). Persist outcome to `downloads`: stored path, `http_status`, `error` on failure.
+- Failures must be visible in logs and persisted, not swallowed.
+- **VERIFY:** I check the download dir + `downloads` table; failures recorded with reasons. Commit.
+
+### Phase 4 — Structuring pipeline, ≥10 (gate)
+- For ≥10 chosen policies: extract text → LLM → criteria tree → validate against the Pydantic schema → store in `structured_policies` with `llm_metadata`.
+- **"Initial-only" selection logic:** implement and **document in `WALKTHROUGH.md`** the heuristic for picking the *initial* criteria tree (vs continuation / multiple trees). State the fallback (e.g., "first complete criteria tree") and its failure modes.
+- Handle malformed LLM JSON gracefully (store `validation_error`, continue).
+- Add tests for: schema validation, the initial-only selector, idempotent rerun.
+- **VERIFY:** I inspect ≥10 `structured_json` rows in pgweb and confirm they match the `oscar.json` shape. Commit.
+
+### Phase 5 — Frontend (gate)
+- React + Vite. Policy list (title + PDF link, with an indicator for "has structured tree"). Detail view that renders the criteria tree:
+  - expand/collapse per node (minimum),
+  - clearly distinguishes `AND` / `OR` operator nodes from leaf criteria,
+  - shows title + source/PDF links.
+- Handle large nested trees readably (this is a Q/A topic).
+- **VERIFY:** I browse the UI, open a structured policy, expand/collapse the tree. Commit.
+
+### Final
+- Update `README.md` section with setup, run commands, which policies were structured, and the "Initial-only selection logic" explanation.
+- Confirm a fresh clone (and a fresh unzip) runs end-to-end via `SETUP.md`.
+- Final `WALKTHROUGH.md` pass: full architecture diagram + data-flow diagram.
+
+---
+
+## Style
+Be concise and direct. No buzzwords, no over-explaining. Show me commands and code pointers, not prose. When you hit a real decision, stop and ask.
+
+Start with Phase 0. First, confirm the stack (especially the LLM provider) and show me the proposed repo layout before creating files.
